@@ -17,6 +17,10 @@ public class CollectionManager {
         loadCollection();
     }
 
+    public DatabaseManager getDbManager() {
+        return dbManager;
+    }
+
     private void loadCollection() {
         try {
             List<Organization> loaded = dbManager.loadCollection();
@@ -36,9 +40,9 @@ public class CollectionManager {
     }
 
     /** Добавление: сначала БД, только при успехе -> память */
-    public synchronized boolean addToCollection(Organization element) {
+    public synchronized boolean addToCollection(Organization element, String username) {
         try {
-            long generatedId = dbManager.insertOrganization(element);
+            long generatedId = dbManager.insertOrganization(element,username);
             element.setId(generatedId);
             collection.add(element);
             usedIds.add(generatedId);
@@ -102,11 +106,15 @@ public class CollectionManager {
     }
 
     /** Очистка: сначала БД, затем память */
-    public synchronized void clearCollection() {
+    public synchronized void clearCollection(String username) {
         try {
-            dbManager.clearTable();
+            dbManager.clearTable(username);
+
             collection.clear();
             usedIds.clear();
+
+            loadCollection();
+
             lastSaveTime = LocalDateTime.now();
         } catch (SQLException e) {
             System.err.println("Ошибка при очистке БД: " + e.getMessage());

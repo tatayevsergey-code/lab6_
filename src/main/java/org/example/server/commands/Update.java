@@ -28,16 +28,23 @@ public class Update extends Command {
             }
 
             Organization oldOrg = collectionManager.getById(id);
+            Organization newOrg = request.getOrganization();
             if (oldOrg == null) {
                 return new Response(false, "Организация с id=" + id + " не найдена", null);
             }
-
-            Organization newOrg = request.getOrganization();
-            if (newOrg == null) {
-                return new Response(false, "Нет данных для обновления", null);
+            else {
+                if(oldOrg.getUsername().equals(request.getUser())) {
+                    if (newOrg == null) {
+                        return new Response(false, "Нет данных для обновления", null);
+                    }
+                } else {
+                    return new Response(false, "Нет прав для обновления информации по данной организации", null);
+                }
             }
 
-            // 🔑 КРИТИЧНО: явно сохраняем оригинальный ID и дату создания
+
+
+            // явно сохраняем оригинальный ID и дату создания
             newOrg.setId(oldOrg.getId());
             newOrg.setCreationDate(oldOrg.getCreationDate());
 

@@ -7,8 +7,6 @@ import org.example.common.exceptions.MustBeNotEmptyException;
 import org.example.common.exceptions.ValidationException;
 import org.example.common.models.*;
 
-import java.io.IOException;
-import java.time.LocalDate;
 import java.util.Scanner;
 
 public class Add extends Command{
@@ -20,7 +18,7 @@ public class Add extends Command{
     }
 
     @Override
-    public void execute(String argument) {
+    public Response execute(String argument) {
         try {
             Organization organization;
 
@@ -35,6 +33,7 @@ public class Add extends Command{
         } catch (Exception e) {
             System.out.println("Произошла ошибка: " + e.getMessage());
         }
+        return null;
     }
 
     private Organization interactiveOrganization() throws Exception{

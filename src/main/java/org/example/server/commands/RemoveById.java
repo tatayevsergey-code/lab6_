@@ -27,8 +27,13 @@ public class RemoveById extends Command {
             if (organization == null) {
                 return new Response(true, "Организация с id=" + id + " не найдена", null);
             }
-            collectionManager.removeFromCollection(organization);
-            return new Response(true, "Организация с id=" + id + " удалена", null);
+
+            if(organization.getUsername().equals(request.getUser())) {
+                collectionManager.removeFromCollection(organization);
+                return new Response(true, "Организация с id=" + id + " удалена", null);
+            } else {
+                return new Response(true, "Организация с id=" + id + "не удалена, т.к. у вас нет прав на её удаление", null);
+            }
         } catch (Exception e){
             return new Response(false, "Произошла ошибка: " + e.getMessage(), null);
         }

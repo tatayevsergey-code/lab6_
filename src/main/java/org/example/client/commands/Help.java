@@ -13,7 +13,7 @@ public class Help extends Command{
         this.clientNetworkManager = clientNetworkManager;
     }
     @Override
-    public void execute(String argument) {
+    public Response execute(String argument) {
         try{
             Request request = new Request("help", null, null);
             Response response = clientNetworkManager.sendRequest(request);
@@ -21,5 +21,6 @@ public class Help extends Command{
         } catch (IOException | ClassNotFoundException e) {
             System.out.println("Произошла ошибка" + e.getMessage());
         }
+        return null;
     }
 }

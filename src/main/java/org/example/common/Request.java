@@ -12,6 +12,24 @@ public class Request implements Serializable {
     private String name;
     private Object argument;
     private Organization organization;
+    private String user;
+    private String password;
+
+    public String getUser() {
+        return user;
+    }
+
+    public void setUser(String user) {
+        this.user = user;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
 
     public Request(String name, Object argument, Organization organization){
         this.name = name;

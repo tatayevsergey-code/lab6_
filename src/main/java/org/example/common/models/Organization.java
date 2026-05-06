@@ -17,7 +17,7 @@ public class Organization implements Comparable<Organization>, Serializable {
     private float annualTurnover;
     private OrganizationType type;
     private Address officialAddress;
-
+    private String username;
 
     public Organization() {
     }
@@ -93,6 +93,13 @@ public class Organization implements Comparable<Organization>, Serializable {
         this.officialAddress = officialAddress;
     }
 
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
 
     @Override
     public int compareTo(Organization o) {

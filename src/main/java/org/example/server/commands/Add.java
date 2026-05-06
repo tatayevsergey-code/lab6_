@@ -25,7 +25,7 @@ public class Add extends Command {
             org.setCreationDate(LocalDate.now());
 
             // addToCollection теперь сам генерирует ID через БД и возвращает true/false
-            boolean success = collectionManager.addToCollection(org);
+            boolean success = collectionManager.addToCollection(org,request.getUser());
 
             if (success) {
                 // ID уже проставлен внутри addToCollection() после успешной вставки в БД

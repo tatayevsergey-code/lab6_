@@ -4,7 +4,6 @@ import org.example.client.network.ClientNetworkManager;
 import org.example.common.Request;
 import org.example.common.Response;
 
-import javax.imageio.IIOException;
 import java.io.IOException;
 
 public class Show extends Command{
@@ -14,7 +13,7 @@ public class Show extends Command{
     }
 
     @Override
-    public void execute(String argument) {
+    public Response execute(String argument) {
         try{
             Request request = new Request("show", null, null);
             Response response = networkManager.sendRequest(request);
@@ -26,5 +25,6 @@ public class Show extends Command{
             System.out.println("Ошибка: " + e.getMessage());
         }
 
+        return null;
     }
 }

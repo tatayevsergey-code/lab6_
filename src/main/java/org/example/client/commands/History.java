@@ -4,7 +4,6 @@ import org.example.client.network.ClientNetworkManager;
 import org.example.common.Request;
 import org.example.common.Response;
 
-import javax.imageio.IIOException;
 import java.io.IOException;
 
 public class History extends Command{
@@ -14,7 +13,7 @@ public class History extends Command{
     }
 
     @Override
-    public void execute(String argument) {
+    public Response execute(String argument) {
         try{
             Request request = new Request("history", null, null);
             Response response = clientNetworkManager.sendRequest(request);
@@ -22,5 +21,6 @@ public class History extends Command{
         } catch (IOException | ClassNotFoundException e){
             System.out.println("Произошла ошибка: " + e.getMessage());
         }
+        return null;
     }
 }

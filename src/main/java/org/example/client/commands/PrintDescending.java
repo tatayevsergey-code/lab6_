@@ -13,7 +13,7 @@ public class PrintDescending extends Command{
     }
 
     @Override
-    public void execute(String argument) {
+    public Response execute(String argument) {
         try {
             Request request = new Request("print_descending", null, null);
             Response response = clientNetworkManager.sendRequest(request);
@@ -25,5 +25,6 @@ public class PrintDescending extends Command{
             System.out.println("Произошла ошибка: " + e.getMessage());
         }
 
+        return null;
     }
 }

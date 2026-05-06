@@ -22,11 +22,11 @@ public class Update extends Command{
     }
 
     @Override
-    public void execute(String argument) {
+    public Response execute(String argument) {
         try {
             if (argument == null || argument.trim().isEmpty()) {
                 System.out.println("Неверный формат команды, введите id");
-                return;
+                return null;
             }
             String idArg = argument.trim().toLowerCase()
                     .replaceAll("^id\\s+", "")
@@ -40,6 +40,7 @@ public class Update extends Command{
         } catch (Exception e){
             System.out.println("Произошла ошибка: " + e.getMessage());
         }
+        return null;
     }
 
     private Organization updatedOrganization(String idArg) throws Exception{

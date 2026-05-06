@@ -13,11 +13,11 @@ public class RemoveGreater extends Command{
     }
 
     @Override
-    public void execute(String argument) {
+    public Response execute(String argument) {
         try {
             if (argument == null || argument.trim().isEmpty()) {
                 System.out.println("Неверный формат команды, введите id");
-                return;
+                return null;
             }
             String idArg = argument.trim();
             Request request = new Request("remove_greater", idArg, null);
@@ -26,5 +26,6 @@ public class RemoveGreater extends Command{
         } catch (IOException | ClassNotFoundException e){
             System.out.println("Произошла ошибка: " + e.getMessage());
         }
+        return null;
     }
 }

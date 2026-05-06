@@ -17,12 +17,14 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Iterator;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ServerNetworkManager {
     private ServerSocketChannel serverChannel;
     private int port;
     private Selector selector;
     private static final int BUFFER_SIZE = 8192;
+    private final ConcurrentHashMap<SocketChannel, String> authenticatedSessions = new ConcurrentHashMap<>();
 
     public ServerNetworkManager(int port) {
         this.port = port;
@@ -113,7 +115,35 @@ public class ServerNetworkManager {
                     Request request = (Request) SerializationUtil.deserialize(buffer);
                     System.out.println("Получен запрос: " + request.getName());
 
+                    //новый код (проверка авторизации)
+                    String cmd = request.getName().toLowerCase();
+                    SocketChannel channel = (SocketChannel) key.channel();
+
+                    // 1. Блокировка команд для неавторизованных пользователей
+                    if (!cmd.equals("login") && !cmd.equals("register")) {
+                        String currentUser = authenticatedSessions.get(channel);
+                        if (currentUser == null) {
+                            Response authError = new Response(false,"Ошибка: Требуется авторизация. Выполните login или register.", null);
+                            ByteBuffer errBuf = SerializationUtil.serialize(authError);
+                            while (errBuf.hasRemaining()) channel.write(errBuf);
+                            continue; // Пропускаем вызов обработчика
+                        }
+                        request.setUser(currentUser); // Передаем имя пользователя в запрос
+                    }
+
+                    // 2. Вызов обработчика команд
                     Response response = handler.handle(request);
+
+                    // 3. Обновление сессии после успешного входа/регистрации
+                    if (response.isSuccess() && (cmd.equals("login") || cmd.equals("register"))) {
+                        // Предполагаем, что логин передан в первом аргументе запроса
+                        String login = request.getUser();
+                        authenticatedSessions.put(channel, login);
+                    }
+                    else if (cmd.equals("logout")) {
+                        authenticatedSessions.remove(channel);
+                        //response.setMessage(true,"Вы успешно вышли из системы.",null);
+                    }
 
                     ByteBuffer responseBuffer = SerializationUtil.serialize(response);
                     while (responseBuffer.hasRemaining()) {
@@ -127,6 +157,12 @@ public class ServerNetworkManager {
                 }
             }
             buffer.compact();
+        }
+        else if (bytesRead == -1) {
+            key.cancel();
+            clientChannel.close();
+            authenticatedSessions.remove(clientChannel); // <-- Добавить эту строку
+            System.out.println("Клиент отключён ");
         }
     }
 

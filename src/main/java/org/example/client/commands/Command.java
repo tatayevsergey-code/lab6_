@@ -1,8 +1,10 @@
 package org.example.client.commands;
 
-import java.util.Scanner;
+import org.example.common.Response;
 
 public abstract class Command {
 
-    public void execute(String argument){}
+    public Response execute(String argument){
+        return null;
+    }
 }

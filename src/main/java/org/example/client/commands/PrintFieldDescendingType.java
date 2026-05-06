@@ -13,7 +13,7 @@ public class PrintFieldDescendingType extends Command{
     }
 
     @Override
-    public void execute(String argument) {
+    public Response execute(String argument) {
         try{
             Request request = new Request("print_field_descending_type", null, null);
             Response response = clientNetworkManager.sendRequest(request);
@@ -24,5 +24,6 @@ public class PrintFieldDescendingType extends Command{
         }catch (IOException | ClassNotFoundException e){
             System.out.println("Произошла ошибка: " + e.getMessage());
         }
+        return null;
     }
 }

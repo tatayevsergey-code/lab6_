@@ -14,7 +14,7 @@ public class Clear extends Command{
     @Override
     public Response execute(Request request) {
          try {
-             collectionManager.clearCollection();
+             collectionManager.clearCollection(request.getUser());
              return new Response(true, "Коллекция очищена", null);
          } catch (Exception e) {
              return new Response(false, "Произошла ошибка: " + e.getMessage(), null);

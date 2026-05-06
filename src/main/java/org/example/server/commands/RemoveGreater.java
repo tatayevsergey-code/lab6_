@@ -36,12 +36,15 @@ public class RemoveGreater extends Command{
             while (iterator.hasNext()) {
                 Organization organization = iterator.next();
                 if (organization.getId() > idMax) {
-                    iterator.remove();
-                    removedCount++;
+                    if(organization.getUsername().equals(request.getUser())) {
+                        collectionManager.getDbManager().deleteOrganization(organization.getId());
+                        iterator.remove();
+                        removedCount++;
+                    }
                 }
             }
             if (removedCount == 0) {
-                return new Response(true, "Нет элементов, которые превышают id = " + idMax, null);
+                return new Response(true, "Нет элементов (или нет прав на удаление), которые превышают id = " + idMax, null);
             } else {
                 return new Response(true, "Элементы, превышающие id = " + idMax + " удалены", null);
             }

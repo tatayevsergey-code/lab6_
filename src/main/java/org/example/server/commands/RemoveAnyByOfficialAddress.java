@@ -33,6 +33,7 @@ public class RemoveAnyByOfficialAddress extends Command{
             street = street.trim();
             Collection<Organization> collection = collectionManager.getCollection();
             boolean found = false;
+            boolean permission_denied = false;
 
             if (collection.isEmpty()){
                 return new Response(true, "Коллекция пуста", null);
@@ -43,7 +44,12 @@ public class RemoveAnyByOfficialAddress extends Command{
                 Organization org = iterator.next();
                 Address addr = org.getOfficialAddress();
                 if (addr != null && street.equals(addr.getStreet())) {
-                    iterator.remove();
+                    if(org.getUsername().equals(request.getUser())) {
+                        collectionManager.getDbManager().deleteOrganization(org.getId());
+                        iterator.remove();
+                    } else {
+                        permission_denied = true;
+                    }
                     found = true;
                     break;
                 }
@@ -51,7 +57,8 @@ public class RemoveAnyByOfficialAddress extends Command{
             if (!found){
                 return new Response(true, "Элемент с улицей: " + street + " не найден", null);
             } else {
-                return new Response(true, "Элемент с адресом: " + street + " удалён", null);
+                if(permission_denied) return new Response(true, "Элемент с адресом: " + street + "не удален, т.к. у вас нет прав на его удаление", null);
+                    else return new Response(true, "Элемент с адресом: " + street + " удалён", null);
             }
         } catch (Exception e) {
             return new Response(false, "Произошла ошибка: " + e.getMessage(), null);

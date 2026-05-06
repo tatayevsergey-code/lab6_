@@ -47,6 +47,9 @@ public class ServerApp {
             register("remove_by_id", new RemoveById(collectionManager));
             register("remove_any_by_official_address", new RemoveAnyByOfficialAddress(collectionManager));
             register("update", new Update(collectionManager));
+            register("login", new LoginCommand(collectionManager));
+            register("register", new RegisterCommand(collectionManager));
+            //register("logout", new LogoutCommand()); // Опционально, просто возвращает success
         }};
 
         RequestHandler handler = new RequestHandler(commandManager);

@@ -2,6 +2,8 @@ package org.example.client.util;
 
 import org.example.client.commands.*;
 import org.example.client.network.ClientNetworkManager;
+import org.example.common.Request;
+import org.example.common.Response;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -31,9 +33,36 @@ public class Runner {
         commands.put("update", new Update(scanner, networkManager));
         commands.put("execute_script", new ExecuteScript(networkManager, scanner));
         commands.put("exit", new Exit());
+
+        commands.put("register", new Register(networkManager));
+        commands.put("login", new Login(networkManager));
+        //commands.put("logout", new Logout());
     }
 
         public void interactiveMode() {
+
+            boolean authorized = false;
+            while (!authorized) {
+                System.out.print("Введите команду авторизации (login <логин> <пароль> / register <логин> <пароль>): ");
+                String input = scanner.nextLine().trim();
+                if (input.isEmpty()) continue;
+
+                String[] parts = input.split(" ", 3);
+                String commandName = parts[0];
+                if(parts.length < 3) continue;//throw new IllegalArgumentException("Неверный формат ввода");
+                String username = parts[1], password = parts[2];
+                Command command = commands.get(commandName);
+                if (command == null) {
+                    System.out.println("Неизвестная команда, введите еще раз");
+                    continue;
+                }
+                Response resp = command.execute(/*argument*/username + " " + password);
+
+                if (resp.isSuccess() && (commandName.equals("login") || commandName.equals("register"))) {
+                    authorized = true;
+                }
+            }
+
             System.out.println("Введите команду");
             while (true) {
                 try {

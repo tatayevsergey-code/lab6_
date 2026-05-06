@@ -11,11 +11,11 @@ public class RemoveAnyByOfficialAddress extends Command{
     }
 
     @Override
-    public void execute(String argument) {
+    public Response execute(String argument) {
         try{
             if (argument == null || argument.trim().isEmpty()) {
                 System.out.println("Неверный формат команды, введите id");
-                return;
+                return null;
             }
 
             String street = argument.trim();
@@ -25,5 +25,6 @@ public class RemoveAnyByOfficialAddress extends Command{
         } catch (Exception e) {
             System.out.println("Произошла: " + e.getMessage());
         }
+        return null;
     }
 }

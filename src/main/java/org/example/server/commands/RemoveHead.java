@@ -22,7 +22,12 @@ public class RemoveHead extends Command{
                 return new Response(true, "Коллекция пуста", null);
             }
             Organization head = collection.poll();
-            return new Response(true, "Первый элемент коллекции:", head);
+            if(head.getUsername().equals(request.getUser())) {
+                collectionManager.getDbManager().deleteOrganization(head.getId());
+                return new Response(true, "Первый элемент коллекции:", head);
+            } else {
+                return new Response(true, "Первый элемент коллекции (удаление невозможно - нет прав):", head);
+            }
         } catch (Exception e) {
             return new Response(false, "Произошла ошибка: " + e.getMessage(), null);
         }

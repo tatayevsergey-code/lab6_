@@ -24,11 +24,11 @@ public class ExecuteScript extends Command{
     }
 
     @Override
-    public void execute(String argument) {
+    public Response execute(String argument) {
         try {
             if (argument == null || argument.trim().isEmpty()) {
                 System.out.println("Неверный формат команды, укажите путь к файлу");
-                return;
+                return null;
             }
 
             String fileName = argument.trim();
@@ -36,7 +36,7 @@ public class ExecuteScript extends Command{
 
             if (executingScripts.contains(pathScript)) {
                 System.out.println("Ошибка. рекурсивное выполнение скрипта");
-                return;
+                return null;
             }
 
             executeScriptFile(pathScript);
@@ -44,6 +44,7 @@ public class ExecuteScript extends Command{
         } catch (Exception e){
             System.out.println("Произошла ошибка: " + e.getMessage());
         }
+        return null;
     }
 
     private void executeScriptFile(Path pathScript) throws IOException {
