@@ -1,27 +1,30 @@
 package org.example.server.manager;
-
 import org.example.common.models.Organization;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class CollectionManager {
-    private PriorityQueue<Organization> collection = new PriorityQueue<>();
+    private final PriorityQueue<Organization> collection = new PriorityQueue<>();
     private LocalDateTime lastInitTime;
     private LocalDateTime lastSaveTime;
     private final DatabaseManager dbManager;
     private final Set<Long> usedIds = new HashSet<>();
+
+    // Заменяем synchronized на ReadWriteLock
+    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public CollectionManager(DatabaseManager dbManager) {
         this.dbManager = dbManager;
         loadCollection();
     }
 
-    public DatabaseManager getDbManager() {
-        return dbManager;
-    }
+    public DatabaseManager getDbManager() { return dbManager; }
 
     private void loadCollection() {
+        rwLock.writeLock().lock();
         try {
             List<Organization> loaded = dbManager.loadCollection();
             usedIds.clear();
@@ -34,100 +37,81 @@ public class CollectionManager {
             System.out.println("Загружены данные из PostgreSQL. В коллекции " + loaded.size() + " объект(а/ов).");
         } catch (SQLException e) {
             System.err.println("Ошибка при загрузке коллекции из БД: " + e.getMessage());
-            collection.clear();
-            usedIds.clear();
-        }
+            collection.clear(); usedIds.clear();
+        } finally { rwLock.writeLock().unlock(); }
     }
 
-    /** Добавление: сначала БД, только при успехе -> память */
-    public synchronized boolean addToCollection(Organization element, String username) {
+    public boolean addToCollection(Organization element, String username) {
+        rwLock.writeLock().lock();
         try {
-            long generatedId = dbManager.insertOrganization(element,username);
+            long generatedId = dbManager.insertOrganization(element, username);
             element.setId(generatedId);
             collection.add(element);
             usedIds.add(generatedId);
             return true;
         } catch (SQLException e) {
-            System.err.println("Ошибка при добавлении в БД. Объект не добавлен в коллекцию: " + e.getMessage());
+            System.err.println("Ошибка при добавлении в БД: " + e.getMessage());
             return false;
-        }
+        } finally { rwLock.writeLock().unlock(); }
     }
 
-    /** Удаление: сначала БД, затем память */
-    public synchronized void removeFromCollection(Organization element) {
+    public void removeFromCollection(Organization element) {
+        rwLock.writeLock().lock();
         try {
             dbManager.deleteOrganization(element.getId());
             collection.remove(element);
             usedIds.remove(element.getId());
         } catch (SQLException e) {
             System.err.println("Ошибка при удалении из БД: " + e.getMessage());
-        }
+        } finally { rwLock.writeLock().unlock(); }
     }
 
-    /** Обновление: меняем в памяти, синхронизируем с БД */
-//    public synchronized boolean updateOrganization(Organization updated) {
-//        if (!checkExist(updated.getId())) return false;
-//        try {
-//            dbManager.updateOrganization(updated);
-//            collection.remove(updated);
-//            collection.add(updated); // PriorityQueue пересортируется при необходимости
-//            return true;
-//        } catch (SQLException e) {
-//            System.err.println("Ошибка при обновлении в БД: " + e.getMessage());
-//            return false;
-//        }
-//    }
-
-    /** Обновление: сначала БД, только при успехе -> память. ID сохраняется. */
-    public synchronized boolean updateOrganization(Organization updated) {
-        long id = updated.getId();
-        Organization old = getById(id);
-        if (old == null) {
-            System.err.println("Объект с ID " + id + " не найден в коллекции.");
-            return false;
-        }
-
-        // Удаляем старую версию из PriorityQueue по прямой ссылке.
-        // Это надёжнее, чем remove(updated), так как equals() уже не совпадёт из-за изменённых полей.
-        collection.remove(old);
-
+    public boolean updateOrganization(Organization updated) {
+        rwLock.writeLock().lock();
         try {
-            // 1. Обновляем запись в БД (WHERE id=?)
-            dbManager.updateOrganization(updated);
-            // 2. Только при успехе добавляем новую версию в память
-            collection.add(updated);
-            return true;
-        } catch (SQLException e) {
-            // Откат состояния коллекции при ошибке БД: возвращаем старый объект
-            collection.add(old);
-            System.err.println("Ошибка при обновлении в БД. Изменения отменены: " + e.getMessage());
-            return false;
-        }
+            long id = updated.getId();
+            Organization old = getByIdInternal(id);
+            if (old == null) return false;
+
+            collection.remove(old);
+            try {
+                dbManager.updateOrganization(updated);
+                collection.add(updated);
+                return true;
+            } catch (SQLException e) {
+                collection.add(old);
+                System.err.println("Ошибка при обновлении в БД. Изменения отменены: " + e.getMessage());
+                return false;
+            }
+        } finally { rwLock.writeLock().unlock(); }
     }
 
-    /** Очистка: сначала БД, затем память */
-    public synchronized void clearCollection(String username) {
+    public void clearCollection(String username) {
+        rwLock.writeLock().lock();
         try {
             dbManager.clearTable(username);
-
-            collection.clear();
-            usedIds.clear();
-
+            collection.clear(); usedIds.clear();
             loadCollection();
-
             lastSaveTime = LocalDateTime.now();
         } catch (SQLException e) {
             System.err.println("Ошибка при очистке БД: " + e.getMessage());
-        }
+        } finally { rwLock.writeLock().unlock(); }
     }
 
-    /** Заглушка: данные уже сохранены при каждом изменении */
-    public synchronized void saveCollection() {
-        lastSaveTime = LocalDateTime.now();
-        System.out.println("Данные автоматически сохраняются в PostgreSQL при каждом изменении.");
+    public void saveCollection() {
+        rwLock.writeLock().lock();
+        try { lastSaveTime = LocalDateTime.now(); }
+        finally { rwLock.writeLock().unlock(); }
     }
 
+    // --- READ LOCK методы ---
     public Organization getById(long id) {
+        rwLock.readLock().lock();
+        try { return getByIdInternal(id); }
+        finally { rwLock.readLock().unlock(); }
+    }
+
+    private Organization getByIdInternal(long id) {
         for (Organization element : collection) {
             if (element.getId() == id) return element;
         }
@@ -135,13 +119,39 @@ public class CollectionManager {
     }
 
     public boolean checkExist(long id) {
-        return usedIds.contains(id);
+        rwLock.readLock().lock();
+        try { return usedIds.contains(id); }
+        finally { rwLock.readLock().unlock(); }
     }
 
-    public int size() { return collection.size(); }
-    public boolean isEmpty() { return collection.isEmpty(); }
-    public PriorityQueue<Organization> getCollection() { return collection; }
-    public LocalDateTime getTime() { return lastInitTime; }
-    public LocalDateTime getLastSaveTime() { return lastSaveTime; }
-}
+    public int size() {
+        rwLock.readLock().lock();
+        try { return collection.size(); }
+        finally { rwLock.readLock().unlock(); }
+    }
 
+    public boolean isEmpty() {
+        rwLock.readLock().lock();
+        try { return collection.isEmpty(); }
+        finally { rwLock.readLock().unlock(); }
+    }
+
+    // Возвращаем копию, чтобы внешние потоки не ломали итерацию
+    public PriorityQueue<Organization> getCollection() {
+        rwLock.readLock().lock();
+        try { return new PriorityQueue<>(collection); }
+        finally { rwLock.readLock().unlock(); }
+    }
+
+    public LocalDateTime getTime() {
+        rwLock.readLock().lock();
+        try { return lastInitTime; }
+        finally { rwLock.readLock().unlock(); }
+    }
+
+    public LocalDateTime getLastSaveTime() {
+        rwLock.readLock().lock();
+        try { return lastSaveTime; }
+        finally { rwLock.readLock().unlock(); }
+    }
+}

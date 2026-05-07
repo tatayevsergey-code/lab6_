@@ -1,15 +1,10 @@
 package org.example.server.network;
-
 import org.example.common.Request;
 import org.example.common.Response;
 import org.example.common.util.SerializationUtil;
 import org.example.server.handlers.RequestHandler;
-
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -18,6 +13,9 @@ import java.nio.channels.SocketChannel;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
 
 public class ServerNetworkManager {
     private ServerSocketChannel serverChannel;
@@ -26,11 +24,16 @@ public class ServerNetworkManager {
     private static final int BUFFER_SIZE = 8192;
     private final ConcurrentHashMap<SocketChannel, String> authenticatedSessions = new ConcurrentHashMap<>();
 
+    // Пулы согласно заданию
+    private final ExecutorService readerPool = Executors.newCachedThreadPool();
+    private final ForkJoinPool processorPool = new ForkJoinPool();
+    private final ForkJoinPool writerPool = new ForkJoinPool();
+
     public ServerNetworkManager(int port) {
         this.port = port;
     }
 
-    public void start(RequestHandler handler){
+    public void start(RequestHandler handler) {
         try {
             serverChannel = ServerSocketChannel.open();
             serverChannel.configureBlocking(false);
@@ -44,7 +47,6 @@ public class ServerNetworkManager {
 
             while (true) {
                 selector.select();
-
                 Set<SelectionKey> selectedKeys = selector.selectedKeys();
                 Iterator<SelectionKey> iterator = selectedKeys.iterator();
 
@@ -53,12 +55,8 @@ public class ServerNetworkManager {
                     iterator.remove();
 
                     try {
-                        if (key.isAcceptable()) {
-                            handleAccept(key);
-                        }
-                        if (key.isReadable()) {
-                            handleRead(key, handler);
-                        }
+                        if (key.isAcceptable()) handleAccept(key);
+                        if (key.isReadable()) handleRead(key, handler);
                     } catch (Exception e) {
                         System.err.println("Ошибка обработки: " + e.getMessage());
                         e.printStackTrace();
@@ -73,10 +71,9 @@ public class ServerNetworkManager {
         }
     }
 
-    private void handleAccept(SelectionKey key) throws IOException{
+    private void handleAccept(SelectionKey key) throws IOException {
         ServerSocketChannel serverChannel = (ServerSocketChannel) key.channel();
         SocketChannel clientChannel = serverChannel.accept();
-
         if (clientChannel != null) {
             clientChannel.configureBlocking(false);
             clientChannel.register(selector, SelectionKey.OP_READ, ByteBuffer.allocate(BUFFER_SIZE));
@@ -84,90 +81,105 @@ public class ServerNetworkManager {
         }
     }
 
-    private void handleRead(SelectionKey key, RequestHandler handler) throws IOException, ClassNotFoundException {
-        SocketChannel clientChannel = (SocketChannel) key.channel();
-        ByteBuffer buffer = (ByteBuffer) key.attachment();
+    private void handleRead(SelectionKey key, RequestHandler handler) {
+        // 🔹 Чтение в CachedThreadPool
+        readerPool.submit(() -> {
+            try {
+                SocketChannel clientChannel = (SocketChannel) key.channel();
+                ByteBuffer buffer = (ByteBuffer) key.attachment();
 
-        int bytesRead = clientChannel.read(buffer);
-        if (bytesRead == -1) {
-            key.cancel();
-            clientChannel.close();
-            System.out.println("Клиент отключён");
-            return;
-        }
-
-        if (bytesRead > 0) {
-            buffer.flip();
-
-            while (true) {
-
-                if (buffer.remaining() < 4) {
-                    break;
+                int bytesRead = clientChannel.read(buffer);
+                if (bytesRead == -1) {
+                    key.cancel();
+                    clientChannel.close();
+                    authenticatedSessions.remove(clientChannel);
+                    System.out.println("Клиент отключён");
+                    return;
                 }
 
-                buffer.mark();
-                int length = buffer.getInt();
+                if (bytesRead > 0) {
+                    buffer.flip();
 
-                if (buffer.remaining() >= length) {
+                    while (true) {
+                        if (buffer.remaining() < 4) break;
 
-                    buffer.reset();
+                        buffer.mark();
+                        int length = buffer.getInt();
 
-                    Request request = (Request) SerializationUtil.deserialize(buffer);
-                    System.out.println("Получен запрос: " + request.getName());
+                        if (buffer.remaining() >= length) {
+                            // 🔹 КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: сбрасываем позицию, чтобы deserialize() увидела [length][payload]
+                            buffer.reset();
 
-                    //новый код (проверка авторизации)
-                    String cmd = request.getName().toLowerCase();
-                    SocketChannel channel = (SocketChannel) key.channel();
+                            Request request = (Request) SerializationUtil.deserialize(buffer);
+                            System.out.println("Получен запрос: " + request.getName());
 
-                    // 1. Блокировка команд для неавторизованных пользователей
-                    if (!cmd.equals("login") && !cmd.equals("register")) {
-                        String currentUser = authenticatedSessions.get(channel);
-                        if (currentUser == null) {
-                            Response authError = new Response(false,"Ошибка: Требуется авторизация. Выполните login или register.", null);
-                            ByteBuffer errBuf = SerializationUtil.serialize(authError);
-                            while (errBuf.hasRemaining()) channel.write(errBuf);
-                            continue; // Пропускаем вызов обработчика
+                            String cmd = request.getName().toLowerCase().trim();
+                            SocketChannel channel = (SocketChannel) key.channel();
+
+                            // Проверка авторизации
+                            if (!cmd.equals("login") && !cmd.equals("register")) {
+                                String currentUser = authenticatedSessions.get(channel);
+                                if (currentUser == null) {
+                                    Response authError = new Response(false, "Ошибка: Требуется авторизация. Выполните login или register.", null);
+                                    ByteBuffer errBuf = SerializationUtil.serialize(authError);
+                                    while (errBuf.hasRemaining()) channel.write(errBuf);
+                                    buffer.compact();
+                                    return;
+                                }
+                                request.setUser(currentUser);
+                            }
+
+                            // 🔹 Обработка в ForkJoinPool
+                            processorPool.submit(() -> {
+                                try {
+                                    Response response = handler.handle(request);
+
+                                    // Управление сессиями
+                                    if (response.isSuccess() && (cmd.equals("login") || cmd.equals("register"))) {
+                                        authenticatedSessions.put(channel, request.getUser());
+                                    } else if (cmd.equals("logout")) {
+                                        authenticatedSessions.remove(channel);
+                                    }
+
+                                    // 🔹 Отправка в другом ForkJoinPool
+                                    writerPool.submit(() -> {
+                                        try {
+                                            ByteBuffer responseBuffer = SerializationUtil.serialize(response);
+                                            while (responseBuffer.hasRemaining()) {
+                                                channel.write(responseBuffer);
+                                            }
+                                            System.out.println("Ответ отправлен: " + response.getMessage());
+                                        } catch (IOException e) {
+                                            System.err.println("Ошибка отправки: " + e.getMessage());
+                                        }
+                                    });
+                                } catch (Exception e) {
+                                    System.err.println("Ошибка обработки: " + e.getMessage());
+                                }
+                            });
+
+                        } else {
+                            buffer.reset();
+                            break;
                         }
-                        request.setUser(currentUser); // Передаем имя пользователя в запрос
                     }
-
-                    // 2. Вызов обработчика команд
-                    Response response = handler.handle(request);
-
-                    // 3. Обновление сессии после успешного входа/регистрации
-                    if (response.isSuccess() && (cmd.equals("login") || cmd.equals("register"))) {
-                        // Предполагаем, что логин передан в первом аргументе запроса
-                        String login = request.getUser();
-                        authenticatedSessions.put(channel, login);
-                    }
-                    else if (cmd.equals("logout")) {
-                        authenticatedSessions.remove(channel);
-                        //response.setMessage(true,"Вы успешно вышли из системы.",null);
-                    }
-
-                    ByteBuffer responseBuffer = SerializationUtil.serialize(response);
-                    while (responseBuffer.hasRemaining()) {
-                        clientChannel.write(responseBuffer);
-                    }
-                    System.out.println("Ответ отправлен: " + response.getMessage());
-
-                } else {
-                    buffer.reset();
-                    break;
+                    buffer.compact();
                 }
+            } catch (Exception e) {
+                System.err.println("Ошибка чтения: " + e.getMessage());
+                e.printStackTrace();
+                try {
+                    key.cancel();
+                    key.channel().close();
+                } catch (IOException ex) {}
             }
-            buffer.compact();
-        }
-        else if (bytesRead == -1) {
-            key.cancel();
-            clientChannel.close();
-            authenticatedSessions.remove(clientChannel); // <-- Добавить эту строку
-            System.out.println("Клиент отключён ");
-        }
+        });
     }
 
-
-    public void stop(){
+    public void stop() {
+        readerPool.shutdownNow();
+        processorPool.shutdownNow();
+        writerPool.shutdownNow();
         try {
             if (selector != null) selector.close();
             if (serverChannel != null) serverChannel.close();

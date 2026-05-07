@@ -11,7 +11,7 @@ public class Show extends Command{
     CollectionManager collectionManager;
 
     public Show(CollectionManager collectionManager){
-        super("add");
+        super("show");
         this.collectionManager = collectionManager;
     }
 
