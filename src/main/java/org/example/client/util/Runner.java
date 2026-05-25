@@ -37,6 +37,8 @@ public class Runner {
         commands.put("register", new Register(networkManager));
         commands.put("login", new Login(networkManager));
         //commands.put("logout", new Logout());
+
+        commands.put("server_status", new ServerStatus(networkManager));
     }
 
         public void interactiveMode() {

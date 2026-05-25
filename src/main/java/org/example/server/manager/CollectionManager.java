@@ -13,6 +13,10 @@ public class CollectionManager {
     private final DatabaseManager dbManager;
     private final Set<Long> usedIds = new HashSet<>();
 
+    private int clientCount = 0;
+    private int requestInProgressCount = 0;
+    private int requestPerformedCount = 0;
+
     // Заменяем synchronized на ReadWriteLock
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
@@ -153,5 +157,29 @@ public class CollectionManager {
         rwLock.readLock().lock();
         try { return lastSaveTime; }
         finally { rwLock.readLock().unlock(); }
+    }
+
+    public int getClientCount() {
+        return clientCount;
+    }
+
+    public int getRequestInProgressCount() {
+        return requestInProgressCount;
+    }
+
+    public int getRequestPerformedCount() {
+        return requestPerformedCount;
+    }
+
+    public void setClientCount(int clientCount) {
+        this.clientCount = clientCount;
+    }
+
+    public void setRequestInProgressCount(int requestInProgressCount) {
+        this.requestInProgressCount = requestInProgressCount;
+    }
+
+    public void setRequestPerformedCount(int requestPerformedCount) {
+        this.requestPerformedCount = requestPerformedCount;
     }
 }

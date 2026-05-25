@@ -3,6 +3,8 @@ import org.example.common.Request;
 import org.example.common.Response;
 import org.example.common.util.SerializationUtil;
 import org.example.server.handlers.RequestHandler;
+import org.example.server.manager.CollectionManager;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -12,10 +14,7 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Iterator;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.*;
 
 public class ServerNetworkManager {
     private ServerSocketChannel serverChannel;
@@ -29,8 +28,23 @@ public class ServerNetworkManager {
     private final ForkJoinPool processorPool = new ForkJoinPool();
     private final ForkJoinPool writerPool = new ForkJoinPool();
 
-    public ServerNetworkManager(int port) {
+    CollectionManager collectionManager;
+    // Отслеживаем все активные соединения. newKeySet() потокобезопасен.
+    private final Set<SocketChannel> activeConnections = ConcurrentHashMap.newKeySet();
+
+    public int getTotalActiveThreads() {
+        int readers = 0;
+        if (readerPool instanceof ThreadPoolExecutor) {
+            readers = ((ThreadPoolExecutor) readerPool).getActiveCount();
+        }
+        int processors = processorPool.getActiveThreadCount();
+        int writers = writerPool.getActiveThreadCount();
+        return readers + processors + writers;
+    }
+
+    public ServerNetworkManager(int port, CollectionManager collectionManager) {
         this.port = port;
+        this.collectionManager = collectionManager;
     }
 
     public void start(RequestHandler handler) {
@@ -74,26 +88,34 @@ public class ServerNetworkManager {
     private void handleAccept(SelectionKey key) throws IOException {
         ServerSocketChannel serverChannel = (ServerSocketChannel) key.channel();
         SocketChannel clientChannel = serverChannel.accept();
+
         if (clientChannel != null) {
             clientChannel.configureBlocking(false);
             clientChannel.register(selector, SelectionKey.OP_READ, ByteBuffer.allocate(BUFFER_SIZE));
             System.out.println("Новый клиент: " + clientChannel.getRemoteAddress());
+
+            // Фиксируем соединение и увеличиваем счётчик
+            activeConnections.add(clientChannel);
+            collectionManager.setClientCount(collectionManager.getClientCount() + 1);
         }
     }
 
     private void handleRead(SelectionKey key, RequestHandler handler) {
         // 🔹 Чтение в CachedThreadPool
         readerPool.submit(() -> {
-            try {
-                SocketChannel clientChannel = (SocketChannel) key.channel();
-                ByteBuffer buffer = (ByteBuffer) key.attachment();
 
+            SocketChannel clientChannel = (SocketChannel) key.channel();
+            ByteBuffer buffer = (ByteBuffer) key.attachment();
+
+            try {
                 int bytesRead = clientChannel.read(buffer);
                 if (bytesRead == -1) {
-                    key.cancel();
-                    clientChannel.close();
-                    authenticatedSessions.remove(clientChannel);
-                    System.out.println("Клиент отключён");
+//                    key.cancel();
+//                    clientChannel.close();
+//                    authenticatedSessions.remove(clientChannel);
+//                    System.out.println("Клиент отключён");
+//                    collectionManager.setClientCount(collectionManager.getClientCount() - 1);
+                    closeClient(clientChannel, key);
                     return;
                 }
 
@@ -131,7 +153,11 @@ public class ServerNetworkManager {
 
                             // 🔹 Обработка в ForkJoinPool
                             processorPool.submit(() -> {
+
                                 try {
+
+                                    collectionManager.setRequestInProgressCount(collectionManager.getRequestInProgressCount() + 1);
+
                                     Response response = handler.handle(request);
 
                                     // Управление сессиями
@@ -143,12 +169,16 @@ public class ServerNetworkManager {
 
                                     // 🔹 Отправка в другом ForkJoinPool
                                     writerPool.submit(() -> {
+
                                         try {
                                             ByteBuffer responseBuffer = SerializationUtil.serialize(response);
                                             while (responseBuffer.hasRemaining()) {
                                                 channel.write(responseBuffer);
                                             }
                                             System.out.println("Ответ отправлен: " + response.getMessage());
+
+                                            collectionManager.setRequestPerformedCount(collectionManager.getRequestPerformedCount() + 1);
+                                            collectionManager.setRequestInProgressCount(collectionManager.getRequestInProgressCount() - 1);
                                         } catch (IOException e) {
                                             System.err.println("Ошибка отправки: " + e.getMessage());
                                         }
@@ -166,14 +196,34 @@ public class ServerNetworkManager {
                     buffer.compact();
                 }
             } catch (Exception e) {
-                System.err.println("Ошибка чтения: " + e.getMessage());
+                System.err.println("Ошибка чтения. Соединение разорвано: " + e.getMessage());
                 e.printStackTrace();
-                try {
-                    key.cancel();
-                    key.channel().close();
-                } catch (IOException ex) {}
+                closeClient(clientChannel, key);
+//                try {
+//                    key.cancel();
+//                    key.channel().close();
+//                } catch (IOException ex) {}
             }
         });
+    }
+
+    /**
+     * Безопасно закрывает соединение и декрементирует счётчик.
+     * Вызывается из любого места: при -1, IOException, или ошибке отправки.
+     */
+    private void closeClient(SocketChannel channel, SelectionKey key) {
+        // remove() вернёт true ТОЛЬКО если соединение ещё не было закрыто
+        if (activeConnections.remove(channel)) {
+            collectionManager.setClientCount(collectionManager.getClientCount() - 1);
+            authenticatedSessions.remove(channel);
+
+            try {
+                if (key != null && key.isValid()) key.cancel();
+                if (channel != null && channel.isOpen()) channel.close();
+            } catch (IOException ignored) {}
+
+            System.out.println("Клиент отключён (счётчик обновлён)");
+        }
     }
 
     public void stop() {
