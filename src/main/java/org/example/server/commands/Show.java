@@ -18,6 +18,13 @@ public class Show extends Command{
     @Override
     public Response execute(Request request) {
         try {
+
+            // 🔹 ИСКУССТВЕННАЯ ЗАДЕРЖКА ДЛЯ ТЕСТИРОВАНИЯ
+            // Симуляция "тяжёлой" операции (1.5 секунды)
+            System.out.println("[Thread: " + Thread.currentThread().getName() + "] Show: начинаю обработку...");
+            Thread.sleep(30*1000);
+            System.out.println("[Thread: " + Thread.currentThread().getName() + "] Show: обработка завершена.");
+
             Collection<Organization> collection = collectionManager.getCollection();
 
             if (collection.isEmpty()) {
