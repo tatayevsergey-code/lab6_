@@ -1,10 +1,11 @@
 package org.example.client.util;
 
 import org.example.client.commands.*;
+import org.example.client.gui.AuthDialog;
 import org.example.client.network.ClientNetworkManager;
-import org.example.common.Request;
 import org.example.common.Response;
 
+import javax.swing.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
@@ -41,50 +42,97 @@ public class Runner {
         commands.put("server_status", new ServerStatus(networkManager));
     }
 
+//        public void interactiveMode() {
+//
+//            boolean authorized = false;
+//            while (!authorized) {
+//                System.out.print("Введите команду авторизации (login <логин> <пароль> / register <логин> <пароль>): ");
+//                String input = scanner.nextLine().trim();
+//                if (input.isEmpty()) continue;
+//
+//                String[] parts = input.split(" ", 3);
+//                String commandName = parts[0];
+//                if(parts.length < 3) continue;//throw new IllegalArgumentException("Неверный формат ввода");
+//                String username = parts[1], password = parts[2];
+//                Command command = commands.get(commandName);
+//                if (command == null) {
+//                    System.out.println("Неизвестная команда, введите еще раз");
+//                    continue;
+//                }
+//                Response resp = command.execute(/*argument*/username + " " + password);
+//
+//                if (resp.isSuccess() && (commandName.equals("login") || commandName.equals("register"))) {
+//                    authorized = true;
+//                }
+//            }
+//
+//            System.out.println("Введите команду");
+//            while (true) {
+//                try {
+//                    System.out.println("> ");
+//                    String line = scanner.nextLine().trim();
+//                    if (line.isEmpty()) {
+//                        continue;
+//                    }
+//
+//                    String[] parts = line.split(" ", 2);
+//                    String commandName = parts[0];
+//                    String argument = parts.length > 1 ? parts[1] : null;
+//                    Command command = commands.get(commandName);
+//                    if (command == null) {
+//                        System.out.println("Неизвестная команда, введите еще раз");
+//                        continue;
+//                    }
+//                    command.execute(argument);
+//                } catch (Exception e){
+//                    System.err.println("Ошибка: " + e.getMessage());
+//                }
+//            }
+//        }
+
         public void interactiveMode() {
+            // 1. Инициализируем Swing
+            SwingUtilities.invokeLater(() -> {
+                AuthDialog authDialog = new AuthDialog(networkManager);
+                authDialog.setVisible(true); // Блокирует поток EDT до закрытия окна
 
-            boolean authorized = false;
-            while (!authorized) {
-                System.out.print("Введите команду авторизации (login <логин> <пароль> / register <логин> <пароль>): ");
-                String input = scanner.nextLine().trim();
-                if (input.isEmpty()) continue;
-
-                String[] parts = input.split(" ", 3);
-                String commandName = parts[0];
-                if(parts.length < 3) continue;//throw new IllegalArgumentException("Неверный формат ввода");
-                String username = parts[1], password = parts[2];
-                Command command = commands.get(commandName);
-                if (command == null) {
-                    System.out.println("Неизвестная команда, введите еще раз");
-                    continue;
+                if (authDialog.isSuccess()) {
+                    System.out.println("✅ Авторизация успешна. Добро пожаловать, " + authDialog.getUsername() + "!");
+                    System.out.println("Введите команду (или 'help' для справки):");
+                    startCommandLoop();
+                } else {
+                    System.out.println("❌ Авторизация отменена. Завершение работы клиента.");
+                    System.exit(0);
                 }
-                Response resp = command.execute(/*argument*/username + " " + password);
+            });
 
-                if (resp.isSuccess() && (commandName.equals("login") || commandName.equals("register"))) {
-                    authorized = true;
-                }
+            // Ждём завершения потока EDT, чтобы клиент не закрылся сразу
+            try {
+                SwingUtilities.invokeAndWait(() -> {
+                });
+            } catch (Exception ignored) {
             }
+        }
 
-            System.out.println("Введите команду");
+        private void startCommandLoop() {
             while (true) {
                 try {
-                    System.out.println("> ");
+                    System.out.print("> ");
                     String line = scanner.nextLine().trim();
-                    if (line.isEmpty()) {
-                        continue;
-                    }
+                    if (line.isEmpty()) continue;
 
-                    String[] parts = line.split(" ", 2);
+                    String[] parts = line.split("\\s+", 2);
                     String commandName = parts[0];
                     String argument = parts.length > 1 ? parts[1] : null;
+
                     Command command = commands.get(commandName);
                     if (command == null) {
-                        System.out.println("Неизвестная команда, введите еще раз");
+                        System.out.println("⚠️ Неизвестная команда. Введите 'help' для справки.");
                         continue;
                     }
                     command.execute(argument);
-                } catch (Exception e){
-                    System.err.println("Ошибка: " + e.getMessage());
+                } catch (Exception e) {
+                    System.err.println("❌ Ошибка: " + e.getMessage());
                 }
             }
         }

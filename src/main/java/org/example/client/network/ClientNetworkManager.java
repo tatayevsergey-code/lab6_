@@ -7,6 +7,7 @@ import org.example.common.util.SerializationUtil;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 
@@ -76,12 +77,39 @@ public class ClientNetworkManager {
      * @throws ClassNotFoundException если не удалось десериализовать ответ
      */
 
+//    public Response sendRequest(Request request) throws IOException, ClassNotFoundException {
+//        OutputStream out = socket.getOutputStream();
+//        InputStream in = socket.getInputStream();
+//
+//        SerializationUtil.serializeToStream(request, out);
+//        return (Response) SerializationUtil.deserializeFromStream(in);
+//    }
     public Response sendRequest(Request request) throws IOException, ClassNotFoundException {
+        // 🔹 Ключевое исправление: проверка и автопереподключение
+        if (socket == null || socket.isClosed()) {
+            System.out.println("[Network] Соединение разорвано или не установлено. Переподключение...");
+            connect();
+        }
+
         OutputStream out = socket.getOutputStream();
         InputStream in = socket.getInputStream();
 
-        SerializationUtil.serializeToStream(request, out);
-        return (Response) SerializationUtil.deserializeFromStream(in);
+        try {
+            SerializationUtil.serializeToStream(request, out);
+            out.flush(); // Гарантируем отправку данных в сеть
+            return (Response) SerializationUtil.deserializeFromStream(in);
+        } catch (SocketException e) {
+            // Если сокет закрылся во время операции, помечаем его для переподключения
+            System.err.println("[Network] Соединение потеряно во время обмена: " + e.getMessage());
+            if (socket != null) {
+                try { socket.close(); } catch (IOException ignored) {}
+            }
+            throw new IOException("Соединение закрыто. Попробуйте снова.", e);
+        }
+    }
+
+    public boolean isConnected() {
+        return socket != null && !socket.isClosed() && socket.isConnected();
     }
 
     /**
