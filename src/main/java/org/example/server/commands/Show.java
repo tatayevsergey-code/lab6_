@@ -21,24 +21,27 @@ public class Show extends Command{
 
             // 🔹 ИСКУССТВЕННАЯ ЗАДЕРЖКА ДЛЯ ТЕСТИРОВАНИЯ
             // Симуляция "тяжёлой" операции (1.5 секунды)
-            System.out.println("[Thread: " + Thread.currentThread().getName() + "] Show: начинаю обработку...");
-            Thread.sleep(20*1000);
-            System.out.println("[Thread: " + Thread.currentThread().getName() + "] Show: обработка завершена.");
+//            System.out.println("[Thread: " + Thread.currentThread().getName() + "] Show: начинаю обработку...");
+//            Thread.sleep(20*1000);
+//            System.out.println("[Thread: " + Thread.currentThread().getName() + "] Show: обработка завершена.");
 
             Collection<Organization> collection = collectionManager.getCollection();
 
-            if (collection.isEmpty()) {
-                return new Response(true, "Коллекция пуста", null);
-            }
+//            if (collection.isEmpty()) {
+//                return new Response(true, "Коллекция пуста", null);
+//            }
 
-            StringBuilder result = new StringBuilder();
-            for (Organization org : collection) {
-                result.append(org.toString()).append("\n");
-            }
+//            StringBuilder result = new StringBuilder();
+//            for (Organization org : collection) {
+//                result.append(org.toString()).append("\n");
+//            }
 
             int size = collectionManager.size();
 
-            return new Response(true, "В коллекции " + size + " элемент/ов, отсортированный по годовому обороту", result);
+//            return new Response(true, "В коллекции " + size + " элемент/ов, отсортированный по годовому обороту", result);
+            return new Response(true,
+                    "В коллекции " + size + " элемент/ов, отсортированный по годовому обороту",
+                    collection);
         } catch (Exception e){
             return new Response(false, "Ошибка: " + e.getMessage(), null);
         }

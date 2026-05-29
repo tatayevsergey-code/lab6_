@@ -2,10 +2,14 @@ package org.example.client.util;
 
 import org.example.client.commands.*;
 import org.example.client.gui.AuthDialog;
+import org.example.client.gui.CollectionTableFrame;
 import org.example.client.network.ClientNetworkManager;
+import org.example.common.Request;
 import org.example.common.Response;
+import org.example.common.models.Organization;
 
 import javax.swing.*;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
@@ -97,9 +101,30 @@ public class Runner {
                 authDialog.setVisible(true); // Блокирует поток EDT до закрытия окна
 
                 if (authDialog.isSuccess()) {
-                    System.out.println("✅ Авторизация успешна. Добро пожаловать, " + authDialog.getUsername() + "!");
+                    String username = authDialog.getUsername();
+                    System.out.println("✅ Авторизация успешна. Добро пожаловать, " + username + "!");
                     System.out.println("Введите команду (или 'help' для справки):");
-                    startCommandLoop();
+                    //startCommandLoop();
+                    // 🔹 Загружаем таблицу в фоне, чтобы не морозить UI
+                    new Thread(() -> {
+                        try {
+                            Request showReq = new Request("show", null, null);
+                            showReq.setUser(username);
+                            Response showResp = networkManager.sendRequest(showReq);
+
+                            if (showResp != null && showResp.isSuccess() && showResp.getData() instanceof Collection) {
+                                Collection<Organization> data = (Collection<Organization>) showResp.getData();
+                                // Показываем таблицу строго в EDT
+                                SwingUtilities.invokeLater(() -> new CollectionTableFrame(data, username,networkManager).setVisible(true));
+                            }
+                        } catch (Exception e) {
+                            System.err.println("⚠️ Не удалось загрузить коллекцию: " + e.getMessage());
+                        }
+                    }).start();
+
+                    System.out.println("Введите команду (или 'help' для справки):");
+                    // Консольный цикл запускаем в отдельном потоке, чтобы он не блокировал Swing EDT
+                    new Thread(this::startCommandLoop, "ConsoleInputThread").start();
                 } else {
                     System.out.println("❌ Авторизация отменена. Завершение работы клиента.");
                     System.exit(0);
