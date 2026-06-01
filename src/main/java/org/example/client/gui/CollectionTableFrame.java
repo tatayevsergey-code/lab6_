@@ -17,7 +17,7 @@ public class CollectionTableFrame extends JFrame {
     private final JTable table;
     private final DefaultTableModel tableModel;
     private final JPanel controlPanel;
-    private final JPanel visualizationPanel;
+    private VisualizationPanel visualizationPanel;
     private JComboBox<Locale> localeCombo;
 
     // ✅ Ссылки на компоненты для безопасного обновления
@@ -256,14 +256,17 @@ public class CollectionTableFrame extends JFrame {
         return panel;
     }
 
-    private JPanel createVisualizationPanel() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder(bundle.getString("panel.viz")));
-        JLabel placeholder = new JLabel("📊 Область для графиков / диаграмм", SwingConstants.CENTER);
-        placeholder.setFont(new Font("SansSerif", Font.ITALIC, 16));
-        placeholder.setForeground(Color.GRAY);
-        panel.add(placeholder, BorderLayout.CENTER);
-        return panel;
+    private VisualizationPanel createVisualizationPanel() {
+        visualizationPanel = new VisualizationPanel();
+        visualizationPanel.setBorder(BorderFactory.createTitledBorder(bundle.getString("panel.viz")));
+        return visualizationPanel;
+    }
+
+    // Добавьте метод для обновления визуализации:
+    public void updateVisualization(Collection<Organization> data) {
+        if (visualizationPanel != null) {
+            visualizationPanel.setData(data);
+        }
     }
 
     private void populateTable(Collection<Organization> collection) {
@@ -300,6 +303,7 @@ public class CollectionTableFrame extends JFrame {
                     .collect(Collectors.toList());
 
             populateTable(filtered);
+            updateVisualization(filtered);
             System.out.println("🔍 Применён фильтр: " + filtered.size() + " из " + originalCollection.size() + " организаций");
         } catch (NumberFormatException e) {
             JOptionPane.showMessageDialog(this, "Введите корректные числовые значения", "Ошибка фильтра", JOptionPane.WARNING_MESSAGE);
@@ -311,6 +315,7 @@ public class CollectionTableFrame extends JFrame {
         maxTurnoverField.setText("");
         if (originalCollection != null) {
             populateTable(originalCollection);
+            updateVisualization(originalCollection);
             System.out.println("🔄 Фильтр сброшен");
         }
     }

@@ -116,6 +116,13 @@ public class Runner {
                                 Collection<Organization> data = (Collection<Organization>) showResp.getData();
                                 // Показываем таблицу строго в EDT
                                 SwingUtilities.invokeLater(() -> new CollectionTableFrame(data, username,networkManager).setVisible(true));
+
+                                // В методе interactiveMode(), после успешной загрузки show:
+                                SwingUtilities.invokeLater(() -> {
+                                    CollectionTableFrame frame = new CollectionTableFrame(data, username, networkManager);
+                                    frame.setVisible(true);
+                                    frame.updateVisualization(data); //  Обновляем визуализацию
+                                });
                             }
                         } catch (Exception e) {
                             System.err.println("⚠️ Не удалось загрузить коллекцию: " + e.getMessage());
